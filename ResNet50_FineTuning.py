@@ -15,17 +15,24 @@ from tensorflow.keras.preprocessing.image import img_to_array
 
 
 
-np.random.seed(0)#inicilizar semilla de aletoriedad para el experimento
+np.random.seed(0)
+#dataframe con label a predecir (cobertura,target,etc) y filename de los tiles 
 dataTrain=pd.read_csv("../dataTrain_label.csv")
 dataTest=pd.read_csv("../dataTest_label.csv")
 dataVal=pd.read_csv("../dataVal_label.csv")
 
 datagen = preprocessing.image.ImageDataGenerator()
+#data augmentation and preprocessing
+#preprocessing_function especial para ResNet50
 datagen = preprocessing.image.ImageDataGenerator(featurewise_center=True,rotation_range=40,horizontal_flip=True,vertical_flip=True)
 datagen.mean = [123.68, 116.779, 103.939]
+#x_col=filename de los tiles 
+#y_col= target a predecir 
+#class_mode="raw" , para regresión 
 train_it = datagen.flow_from_dataframe(dataframe=dataTrain,directory="../dataset_rgb/",x_col="filename",y_col="label",batch_size=64,class_mode="raw",target_size=(224,224),shuffle=True)
 test_it= datagen.flow_from_dataframe(dataframe=dataTest,directory="../test/",x_col="filename",y_col="label",batch_size=64,class_mode="raw",target_size=(224,224),shuffle=True)
 
+#prediction para evaluar desempeño del modelo. 
 def prediction(modelo,dataset,directorio):
 
     predict= np.zeros(len(dataset))
@@ -38,7 +45,7 @@ def prediction(modelo,dataset,directorio):
         result = modelo.predict(img)
         predict[i]= result[0][0]
     return predict 
-
+#evaluacion del modelo con MSE,R-cuadrado,RMSE y MAE. 
 def metrics(real,predict):
     mse=mean_squared_error(real,predict)
     r2=r2_score(real,predict)
@@ -48,16 +55,19 @@ def metrics(real,predict):
 
 
 start_time = time.time()
-opt = tf.keras.optimizers.RMSprop(learning_rate=0.0001)
-early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience= 10,mode='min')
-checkpoint=callbacks.ModelCheckpoint("BestModelResNet.hdf5",monitor='val_loss',save_best_only=True,mode='min')
+opt = tf.keras.optimizers.RMSprop(learning_rate=0.0001)#para definir el optimizers y learning_rate
+early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience= 10,mode='min')#early_stopping para detener el entrenamiento y evitar el overfitting
+#patience= 10 para detener el entrenamiento 10 épocas después del mejor resultado. 
+#monitor='val_loss' monitorear el modelo mediante esta métrica 
+#mode='min' buscar el mínimo error 
+checkpoint=callbacks.ModelCheckpoint("BestModelResNet.hdf5",monitor='val_loss',save_best_only=True,mode='min')#Save al mejor modelo. 
 
 model = ResNet50(include_top=False,input_shape=(224,224, 3))
 
-
+#fine tuning 
 flat1 = layers.Flatten()(model.layers[-1].output)
-class1 = layers.Dense(128, activation='relu')(flat1)
-output = layers.Dense(1, activation='sigmoid')(class1)
+class1 = layers.Dense(128, activation='relu')(flat1)# se incluye una capa de 128 neuronas, con función de activación "relu"
+output = layers.Dense(1, activation='sigmoid')(class1)# capa de salida con sigmoid para medir cobertura. (Puede ser función "linear")
 
 # define new model
 model = Model(inputs=model.inputs, outputs=output)
@@ -87,7 +97,7 @@ print("Desempeño train : ",desem_train)
 print("Desempeño test : ",desem_test)
 print("Desempeño validacion : ",desem_val)
     
-
+#Para graficar real versus predicción. 
 #(ggplot(aes(x = dataVal.iloc[:,1],y = prediction_val)) + 
   #scale_y_continuous(limits=(0,1))+
   #geom_point(alpha=0.5, color='blue')+
